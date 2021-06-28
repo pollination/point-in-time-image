@@ -15,8 +15,9 @@ class PointInTimeViewRayTracing(DAG):
     metric = Inputs.str(
         description='Text for the type of metric to be output from the calculation. '
         'Choose from: illuminance, irradiance, luminance, radiance.',
-        default='luminance', spec={'type': 'string',
-        'enum': ['illuminance', 'irradiance', 'luminance', 'radiance']}
+        default='luminance',
+        spec={'type': 'string',
+              'enum': ['illuminance', 'irradiance', 'luminance', 'radiance']}
     )
 
     resolution = Inputs.int(
@@ -60,11 +61,16 @@ class PointInTimeViewRayTracing(DAG):
 
     view = Inputs.file(description='Input view file.', extensions=['vf'])
 
+    bsdfs = Inputs.folder(
+        description='Folder containing any BSDF files needed for ray tracing.'
+    )
+
     @task(template=SplitView)
     def split_view(
-            self, view_count=view_count, input_view=view, overture=skip_overture,
-            scene_file=octree_file, radiance_parameters=radiance_parameters
-        ):
+        self, view_count=view_count, input_view=view, overture=skip_overture,
+        scene_file=octree_file, radiance_parameters=radiance_parameters,
+        bsdf_folder=bsdfs
+    ):
         return [
             {'from': SplitView()._outputs.views_list},
             {'from': SplitView()._outputs.output_folder, 'to': 'sub_views'},
@@ -82,7 +88,8 @@ class PointInTimeViewRayTracing(DAG):
         self, radiance_parameters=radiance_parameters, metric=metric,
         resolution=resolution, scale_factor=2,
         ambient_cache=split_view._outputs.ambient_cache,
-        view=split_view._outputs.output_folder, scene_file=octree_file
+        view=split_view._outputs.output_folder, scene_file=octree_file,
+        bsdf_folder=bsdfs
     ):
         return [
             {
@@ -95,9 +102,9 @@ class PointInTimeViewRayTracing(DAG):
         template=MergeImages, needs=[ray_tracing]
     )
     def merge_results(
-            self, name=view_name, extension='.unf', folder='results',
-            scale_factor=2
-        ):
+        self, name=view_name, extension='.unf', folder='results',
+        scale_factor=2
+    ):
         return [
             {
                 'from': MergeImages()._outputs.result_image,

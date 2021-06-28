@@ -110,7 +110,14 @@ class PointInTimeViewEntryPoint(DAG):
             ):
         """Translate the input model to a radiance folder."""
         return [
-            {'from': CreateRadianceFolderView()._outputs.model_folder, 'to': 'model'},
+            {
+                'from': CreateRadianceFolderView()._outputs.model_folder,
+                'to': 'model'
+            },
+            {
+                'from': CreateRadianceFolderView()._outputs.bsdf_folder,
+                'to': 'model/bsdf'
+            },
             {
                 'from': CreateRadianceFolderView()._outputs.views_file,
                 'to': 'results/views_info.json'
@@ -148,7 +155,8 @@ class PointInTimeViewEntryPoint(DAG):
         radiance_parameters=radiance_parameters, view_count=view_count,
         octree_file=create_octree._outputs.scene_file,
         view_name='{{item.full_id}}',
-        view=create_rad_folder._outputs.model_folder
+        view=create_rad_folder._outputs.model_folder,
+        bsdfs=create_rad_folder._outputs.bsdf_folder
     ):
         # this task doesn't return a file for each loop.
         # instead we access the results folder directly as an output
