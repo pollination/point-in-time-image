@@ -62,7 +62,8 @@ class PointInTimeViewRayTracing(DAG):
     view = Inputs.file(description='Input view file.', extensions=['vf'])
 
     bsdfs = Inputs.folder(
-        description='Folder containing any BSDF files needed for ray tracing.'
+        description='Folder containing any BSDF files needed for ray tracing.',
+        optional=True
     )
 
     @task(template=SplitView)
