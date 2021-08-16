@@ -5,7 +5,7 @@ from pollination.honeybee_radiance.octree import CreateOctreeWithSky
 from pollination.honeybee_radiance.translate import CreateRadianceFolderView
 
 # input/output alias
-from pollination.alias.inputs.model import hbjson_model_input
+from pollination.alias.inputs.model import hbjson_model_view_input
 from pollination.alias.inputs.pit import point_in_time_view_metric_input
 from pollination.alias.inputs.radiancepar import rad_par_view_input
 from pollination.alias.inputs.bool_options import skip_overture_input
@@ -22,7 +22,7 @@ class PointInTimeViewEntryPoint(DAG):
     model = Inputs.file(
         description='A Honeybee model in HBJSON file format.',
         extensions=['json', 'hbjson', 'pkl', 'hbplk'],
-        alias=hbjson_model_input
+        alias=hbjson_model_view_input
     )
 
     sky = Inputs.str(
