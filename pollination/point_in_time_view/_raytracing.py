@@ -46,7 +46,7 @@ class PointInTimeViewRayTracing(DAG):
 
     radiance_parameters = Inputs.str(
         description='The radiance parameters for ray tracing',
-        default='-ab 2 -aa 0.1 -ad 2048 -ar 64'
+        default='-ab 2 -aa 0.25 -ad 512 -ar 16'
     )
 
     octree_file = Inputs.file(
@@ -68,9 +68,9 @@ class PointInTimeViewRayTracing(DAG):
 
     @task(template=SplitView)
     def split_view(
-        self, view_count=view_count, input_view=view, overture=skip_overture,
-        scene_file=octree_file, radiance_parameters=radiance_parameters,
-        bsdf_folder=bsdfs
+        self, input_view=view, view_count=view_count, resolution=resolution,
+        overture=skip_overture, scene_file=octree_file,
+        radiance_parameters=radiance_parameters, bsdf_folder=bsdfs
     ):
         return [
             {'from': SplitView()._outputs.views_list},
