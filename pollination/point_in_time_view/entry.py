@@ -47,7 +47,7 @@ class PointInTimeViewEntryPoint(DAG):
     resolution = Inputs.int(
         description='An integer for the maximum dimension of each image in pixels '
         '(either width or height depending on the input view angle and type).',
-        spec={'type': 'integer', 'minimum': 1}, default=512
+        spec={'type': 'integer', 'minimum': 1}, default=800
     )
 
     view_filter = Inputs.str(
@@ -79,7 +79,7 @@ class PointInTimeViewEntryPoint(DAG):
 
     radiance_parameters = Inputs.str(
         description='The radiance parameters for ray tracing',
-        default='-ab 2 -aa 0.1 -ad 2048 -ar 64',
+        default='-ab 2 -aa 0.25 -ad 512 -ar 16',
         alias=rad_par_view_input
     )
 
