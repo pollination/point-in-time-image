@@ -51,7 +51,7 @@ class PointInTimeViewEntryPoint(DAG):
     )
 
     view_filter = Inputs.str(
-        description='Text for a view identifer or a pattern to filter the views '
+        description='Text for a view identifier or a pattern to filter the views '
         'of the model that are simulated. For instance, first_floor_* will simulate '
         'only the views that have an identifier that starts with first_floor_. By '
         'default, all views in the model will be simulated.',
