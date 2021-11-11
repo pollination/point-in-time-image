@@ -104,7 +104,7 @@ class PointInTimeViewRayTracing(DAG):
     )
     def merge_results(
         self, name=view_name, extension='.unf', folder='results',
-        scale_factor=2
+        scale_factor=2, original_view=view
     ):
         return [
             {
