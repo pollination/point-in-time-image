@@ -3,12 +3,14 @@ from dataclasses import dataclass
 from pollination.honeybee_radiance.sky import GenSky, AdjustSkyForMetric
 from pollination.honeybee_radiance.octree import CreateOctreeWithSky
 from pollination.honeybee_radiance.translate import CreateRadianceFolderView
+from pollination.honeybee_radiance.view import SplitViewCount
 
 # input/output alias
 from pollination.alias.inputs.model import hbjson_model_view_input
 from pollination.alias.inputs.pit import point_in_time_view_metric_input
 from pollination.alias.inputs.radiancepar import rad_par_view_input
 from pollination.alias.inputs.bool_options import skip_overture_input
+from pollination.alias.inputs.view import cpu_count
 from pollination.alias.outputs.daylight import point_in_time_view_results
 
 from ._raytracing import PointInTimeViewRayTracing
@@ -71,10 +73,12 @@ class PointInTimeViewEntryPoint(DAG):
         spec={'type': 'string', 'enum': ['overture', 'skip-overture']}
     )
 
-    view_count = Inputs.int(
-        description='Number of views into which each Model view will be subdivided '
-        'for parallelized calculation.', default=2,
-        spec={'type': 'integer', 'minimum': 1}
+    cpu_count = Inputs.int(
+        default=12,
+        description='The number of CPUs for parallel execution. This will be '
+        'used to determine the number of times that views are subdivided.',
+        spec={'type': 'integer', 'minimum': 1},
+        alias=cpu_count
     )
 
     radiance_parameters = Inputs.str(
@@ -143,16 +147,30 @@ class PointInTimeViewEntryPoint(DAG):
             }
         ]
 
+    @task(template=SplitViewCount, needs=[create_rad_folder])
+    def compute_view_split_count(
+        self, views_file=create_rad_folder._outputs.views_file,
+        cpu_count=cpu_count
+    ):
+        return [
+            {
+                'from': SplitViewCount()._outputs.split_count,
+                'description': 'An integer for the number of times to split the view.'
+            }
+        ]
+
     @task(
         template=PointInTimeViewRayTracing,
-        needs=[create_rad_folder, create_octree],
+        needs=[create_rad_folder, create_octree, compute_view_split_count],
         loop=create_rad_folder._outputs.views,
         sub_folder='initial_results/{{item.name}}',  # create a subfolder for each view
         sub_paths={'view': 'view/{{item.full_id}}.vf'}  # subpath for view
     )
     def point_in_time_view_ray_tracing(
-        self, metric=metric, resolution=resolution, skip_overture=skip_overture,
-        radiance_parameters=radiance_parameters, view_count=view_count,
+        self, metric=metric, resolution=resolution,
+        skip_overture=skip_overture,
+        radiance_parameters=radiance_parameters,
+        view_count=compute_view_split_count._outputs.split_count,
         octree_file=create_octree._outputs.scene_file,
         view_name='{{item.full_id}}',
         view=create_rad_folder._outputs.model_folder,
