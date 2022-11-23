@@ -1,6 +1,9 @@
-from pollination_dsl.dag import Inputs, DAG, task, Outputs
+"""Prepare folder DAG for point-in-time View-based."""
 from dataclasses import dataclass
-from pollination.honeybee_radiance.view import SplitViewCount
+from pollination_dsl.dag import Inputs, GroupedDAG, task, Outputs
+from pollination.honeybee_radiance.sky import GenSky, AdjustSkyForMetric
+from pollination.honeybee_radiance.octree import CreateOctreeWithSky
+from pollination.honeybee_radiance.translate import CreateRadianceFolderView
 
 # input/output alias
 from pollination.alias.inputs.model import hbjson_model_view_input
@@ -8,15 +11,11 @@ from pollination.alias.inputs.pit import point_in_time_view_metric_input
 from pollination.alias.inputs.radiancepar import rad_par_view_input
 from pollination.alias.inputs.bool_options import skip_overture_input
 from pollination.alias.inputs.view import cpu_count
-from pollination.alias.outputs.daylight import point_in_time_view_results
-
-from ._prepare_folder import PointInTimeViewPrepareFolder
-from ._raytracing import PointInTimeViewRayTracing
 
 
 @dataclass
-class PointInTimeViewEntryPoint(DAG):
-    """Point-in-time View-based entry point."""
+class PointInTimeViewPrepareFolder(GroupedDAG):
+    """Prepare folder for point-in-time-view."""
 
     # inputs
     model = Inputs.file(
@@ -85,72 +84,75 @@ class PointInTimeViewEntryPoint(DAG):
         alias=rad_par_view_input
     )
 
-    @task(template=PointInTimeViewPrepareFolder)
-    def prepare_folder_point_in_time_view(
-        self, model=model, sky=sky, metric=metric, resolution=resolution,
-        view_filter=view_filter, cpu_count=cpu_count
-    ):
+    @task(template=GenSky)
+    def generate_sky(self, sky_string=sky):
         return [
             {
-                'from': PointInTimeViewPrepareFolder()._outputs.model_folder,
+                'from': GenSky()._outputs.sky,
+                'to': 'resources/weather.sky'
+            }
+        ]
+
+    @task(
+        template=AdjustSkyForMetric,
+        needs=[generate_sky]
+    )
+    def adjust_sky(self, sky=generate_sky._outputs.sky, metric=metric):
+        return [
+            {
+                'from': AdjustSkyForMetric()._outputs.adjusted_sky,
+                'to': 'resources/weather.sky'
+            }
+        ]
+
+    @task(template=CreateRadianceFolderView, annotations={'main_task': True})
+    def create_rad_folder(
+        self, input_model=model, view_filter=view_filter
+            ):
+        """Translate the input model to a radiance folder."""
+        return [
+            {
+                'from': CreateRadianceFolderView()._outputs.model_folder,
                 'to': 'model'
             },
             {
-                'from': PointInTimeViewPrepareFolder()._outputs.resources,
-                'to': 'resources'
+                'from': CreateRadianceFolderView()._outputs.bsdf_folder,
+                'to': 'model/bsdf'
             },
             {
-                'from': PointInTimeViewPrepareFolder()._outputs.results,
-                'to': 'results'
-            },
-            {
-                'from': PointInTimeViewPrepareFolder()._outputs.views,
-                'description': 'View information.'
+                'from': CreateRadianceFolderView()._outputs.views_file,
+                'to': 'results/views_info.json'
             }
         ]
 
     @task(
-        template=SplitViewCount,
-        needs=[prepare_folder_point_in_time_view],
-        sub_paths={'views_file': 'views_info.json'}
+        template=CreateOctreeWithSky, needs=[adjust_sky, create_rad_folder]
     )
-    def compute_view_split_count(
-        self, views_file=prepare_folder_point_in_time_view._outputs.results,
-        cpu_count=cpu_count
+    def create_octree(
+        self, model=create_rad_folder._outputs.model_folder,
+        sky=adjust_sky._outputs.adjusted_sky
     ):
+        """Create octree from radiance folder and sky."""
         return [
             {
-                'from': SplitViewCount()._outputs.split_count,
-                'description': 'An integer for the number of times to split the view.'
+                'from': CreateOctreeWithSky()._outputs.scene_file,
+                'to': 'resources/scene.oct'
             }
         ]
 
-    @task(
-        template=PointInTimeViewRayTracing,
-        needs=[prepare_folder_point_in_time_view, compute_view_split_count],
-        loop=prepare_folder_point_in_time_view._outputs.views,
-        sub_folder='initial_results/{{item.name}}',  # create a subfolder for each view
-        sub_paths={
-            'view': 'view/{{item.full_id}}.vf',
-            'octree_file': 'scene.oct',
-            'bsdfs': 'bsdf'
-            }
+    model_folder = Outputs.folder(
+        source='model', description='Input model folder folder.'
     )
-    def point_in_time_view_ray_tracing(
-        self, metric=metric, resolution=resolution,
-        skip_overture=skip_overture,
-        radiance_parameters=radiance_parameters,
-        view_count=compute_view_split_count._outputs.split_count,
-        octree_file=prepare_folder_point_in_time_view._outputs.resources,
-        view_name='{{item.full_id}}',
-        view=prepare_folder_point_in_time_view._outputs.model_folder,
-        bsdfs=prepare_folder_point_in_time_view._outputs.model_folder
-    ):
-        # this task doesn't return a file for each loop.
-        # instead we access the results folder directly as an output
-        pass
+
+    resources = Outputs.folder(
+        source='resources', description='Resources folder.'
+    )
 
     results = Outputs.folder(
-        source='results', description='Folder with raw image files (.HDR) that contain '
-        'images for each view.', alias=point_in_time_view_results
+        source='results', description='Results folder.'
+    )
+
+    views = Outputs.list(
+        source='results/views_info.json',
+        description='Views information JSON file.'
     )
